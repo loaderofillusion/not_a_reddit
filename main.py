@@ -1,4 +1,3 @@
-# main.py
 from flask import Flask, render_template, request, redirect, url_for, flash, abort
 from flask_login import (
     LoginManager,
@@ -36,14 +35,12 @@ def load_user(user_id):
 
 @app.route("/")
 def main_page():
-    # сортировка: новые сверху, ?sort=top — по лайкам
     sort = request.args.get("sort", "new")
     q = Post.query
+
     if sort == "top":
-        # тут можно было бы через subquery считать лайки
-        # отсортируем уже после to_dict
-        posts_query = q.all()
-        posts = [p.to_dict_for_template(current_user) for p in posts_query]
+        # сортировка по лайкам после to_dict — лень делать subquery, постов будет немного
+        posts = [p.to_dict_for_template(current_user) for p in q.all()]
         posts.sort(key=lambda p: p["likes"], reverse=True)
     else:
         posts_query = q.order_by(Post.post_date.desc()).all()
@@ -54,11 +51,9 @@ def main_page():
 
 @app.route("/post/<int:post_id>")
 def show_post(post_id):
-    post_obj = Post.query.get(post_id)
-    if post_obj is None:
-        abort(404)
+    post_obj = Post.query.get_or_404(post_id)
 
-    # увеличиваем счётчик просмотров 
+    # инкрементим просмотры на каждый заход. На накрутки забиваем — не та задача
     post_obj.views = (post_obj.views or 0) + 1
     db.session.commit()
 
@@ -102,15 +97,13 @@ def new_post():
 @login_required
 def like_post(post_id):
     post = Post.query.get_or_404(post_id)
-
     existing = Like.query.filter_by(user_id=current_user.id, post_id=post.id).first()
+    # уже лайкал — снимаем, иначе ставим. Тогл по сути
     if existing:
-        # повторный клик — снимаем лайк
         db.session.delete(existing)
     else:
         db.session.add(Like(user_id=current_user.id, post_id=post.id))
     db.session.commit()
-
     return redirect(request.referrer or url_for("show_post", post_id=post.id))
 
 
@@ -128,10 +121,8 @@ def add_comment(post_id):
         flash("Слишком длинный комментарий", "danger")
         return redirect(url_for("show_post", post_id=post.id))
 
-    c = Comment(text=text, author_id=current_user.id, post_id=post.id)
-    db.session.add(c)
+    db.session.add(Comment(text=text, author_id=current_user.id, post_id=post.id))
     db.session.commit()
-
     return redirect(url_for("show_post", post_id=post.id))
 
 
@@ -150,6 +141,7 @@ def delete_comment(comment_id):
 @app.route("/profile")
 @app.route("/profile/<int:user_id>")
 def profile(user_id=None):
+    # без id — показываем свой профиль (если залогинен)
     if user_id is None:
         if not current_user.is_authenticated:
             return redirect(url_for("login"))
@@ -192,6 +184,7 @@ def login():
         login_value = request.form.get("login")
         password = request.form.get("password")
 
+        # пускаем войти и по нику и по почте — оба уникальны
         user = User.query.filter(
             (User.nickname == login_value) | (User.mail == login_value)
         ).first()

@@ -1,9 +1,9 @@
-# models.py
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# db создаётся тут без app, привязываем уже в main через init_app
 db = SQLAlchemy()
 
 
@@ -38,6 +38,7 @@ class Post(db.Model):
     category = db.Column(db.String, nullable=True)
     views = db.Column(db.Integer, default=0)
 
+    # cascade чтобы при удалении поста ушли и его лайки/комменты
     likes = db.relationship(
         "Like", backref="post", cascade="all, delete-orphan", lazy="dynamic"
     )
@@ -53,7 +54,7 @@ class Post(db.Model):
         return self.comments.count()
 
     def liked_by(self, user):
-        # для анонимов сразу False
+        # для анонимов сразу False, чтоб не делать лишний запрос
         if not user or not user.is_authenticated:
             return False
         return self.likes.filter_by(user_id=user.id).first() is not None
