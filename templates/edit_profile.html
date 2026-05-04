@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Редактировать профиль{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mt-3">
+    <div class="card-body p-4">
+        <h4 class="mb-4">Редактирование профиля</h4>
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label">О себе</label>
+                <textarea name="bio" class="form-control" rows="4" maxlength="300"
+                          placeholder="Пара слов о себе">{{ current_user.bio or '' }}</textarea>
+                <div class="form-text">Максимум 300 символов</div>
+            </div>
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <a href="{{ url_for('profile') }}" class="btn btn-link">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

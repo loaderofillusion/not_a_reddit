@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ user.nickname }} — профиль{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mt-3">
+    <div class="card-body p-4">
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center"
+                 style="width:64px; height:64px; font-size:1.8rem; font-weight:600;">
+                {{ user.nickname[0]|upper }}
+            </div>
+            <div class="ms-3 flex-grow-1">
+                <h4 class="mb-0">{{ user.nickname }}</h4>
+                <small class="text-muted">
+                    На сайте с {{ user.registered_at.strftime('%d.%m.%Y') if user.registered_at else '—' }}
+                </small>
+            </div>
+            {% if current_user.is_authenticated and current_user.id == user.id %}
+                <a href="{{ url_for('edit_profile') }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-pencil"></i> Редактировать
+                </a>
+            {% endif %}
+        </div>
+
+        {% if user.bio %}
+            <p class="mt-3 mb-0" style="white-space: pre-wrap;">{{ user.bio }}</p>
+        {% elif current_user.is_authenticated and current_user.id == user.id %}
+            <p class="mt-3 mb-0 text-muted small fst-italic">
+                О себе ничего не написано. <a href="{{ url_for('edit_profile') }}">Добавить</a>
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+<h5 class="mt-4 mb-3">Посты ({{ posts|length }})</h5>
+
+{% if posts %}
+    {% for post in posts %}
+        <a href="{{ url_for('show_post', post_id=post.post_id) }}" class="text-decoration-none text-reset">
+            <div class="card post-card mb-3 shadow-sm">
+                <div class="card-body p-3">
+                    <h6 class="mb-1">{{ post.title }}</h6>
+                    <small class="text-muted">
+                        {{ post.time }}
+                        • <i class="bi bi-heart"></i> {{ post.likes }}
+                        • <i class="bi bi-chat-dots"></i> {{ post.comments }}
+                    </small>
+                </div>
+            </div>
+        </a>
+    {% endfor %}
+{% else %}
+    <p class="text-muted">Пока нет постов.</p>
+{% endif %}
+{% endblock %}
