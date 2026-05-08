@@ -5,19 +5,23 @@
 <div class="card shadow-sm mt-3">
     <div class="card-body p-4">
         <h3 class="mb-4">Новый пост</h3>
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             <div class="mb-3">
                 <label class="form-label">Заголовок</label>
                 <input type="text" name="title" class="form-control" required maxlength="200">
             </div>
             <div class="mb-3">
-                <label class="form-label">Категория <span class="text-muted small">(необязательно)</span></label>
+                <label class="form-label">Категория <span class="small" style="color: var(--text-muted);">(необязательно)</span></label>
                 <input type="text" name="category" class="form-control"
                        placeholder="например: математика, история, кино" maxlength="50">
             </div>
             <div class="mb-3">
                 <label class="form-label">Текст</label>
                 <textarea name="text" class="form-control" rows="10" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Картинка <span class="small" style="color: var(--text-muted);">(необязательно, до 5 МБ)</span></label>
+                <input type="file" name="image" class="form-control" accept="image/*">
             </div>
             <button type="submit" class="btn btn-primary">Опубликовать</button>
             <a href="{{ url_for('main_page') }}" class="btn btn-link">Отмена</a>

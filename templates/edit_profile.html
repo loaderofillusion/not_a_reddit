@@ -5,13 +5,38 @@
 <div class="card shadow-sm mt-3">
     <div class="card-body p-4">
         <h4 class="mb-4">Редактирование профиля</h4>
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
+
+            <div class="mb-3">
+                <label class="form-label">Аватарка</label>
+                <div class="d-flex align-items-center gap-3 mb-2">
+                    {% if current_user.avatar %}
+                        <img src="{{ url_for('static', filename='uploads/avatars/' + current_user.avatar) }}"
+                             class="avatar-img" style="width:64px; height:64px;">
+                    {% else %}
+                        <div class="avatar-fallback" style="width:64px; height:64px; font-size:1.5rem;">
+                            {{ current_user.nickname[0]|upper }}
+                        </div>
+                    {% endif %}
+                    <div class="flex-grow-1">
+                        <input type="file" name="avatar" class="form-control form-control-sm" accept="image/*">
+                        {% if current_user.avatar %}
+                            <div class="form-check mt-2">
+                                <input type="checkbox" name="remove_avatar" id="remove_avatar" class="form-check-input">
+                                <label for="remove_avatar" class="form-check-label small">Удалить аватарку</label>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
             <div class="mb-3">
                 <label class="form-label">О себе</label>
                 <textarea name="bio" class="form-control" rows="4" maxlength="300"
                           placeholder="Пара слов о себе">{{ current_user.bio or '' }}</textarea>
                 <div class="form-text">Максимум 300 символов</div>
             </div>
+
             <button type="submit" class="btn btn-primary">Сохранить</button>
             <a href="{{ url_for('profile') }}" class="btn btn-link">Отмена</a>
         </form>

@@ -1,4 +1,7 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, abort
+from flask import (
+    Flask, render_template, request, redirect, url_for,
+    flash, abort, make_response,
+)
 from flask_login import (
     LoginManager,
     login_user,
@@ -6,9 +9,18 @@ from flask_login import (
     login_required,
     current_user,
 )
+from datetime import datetime
 import os
+import uuid
 
-from models import db, User, Post, Like, Comment
+from models import db, User, Post, Like, Comment, Follow, Reaction, ALLOWED_REACTIONS
+
+# Pillow юзаем для ресайза, без него тоже работает — просто без ресайза
+try:
+    from PIL import Image
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
 
 
 app = Flask(__name__)
@@ -16,9 +28,19 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "db.db")
 
+UPLOAD_DIR = os.path.join(BASE_DIR, "static", "uploads")
+AVATAR_DIR = os.path.join(UPLOAD_DIR, "avatars")
+POST_IMG_DIR = os.path.join(UPLOAD_DIR, "posts")
+os.makedirs(AVATAR_DIR, exist_ok=True)
+os.makedirs(POST_IMG_DIR, exist_ok=True)
+
+ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024
+
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "very-secret-key")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["MAX_CONTENT_LENGTH"] = MAX_IMAGE_SIZE
 
 db.init_app(app)
 
@@ -33,10 +55,65 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
+# чтобы тема и список реакций были доступны во всех шаблонах без отдельной передачи
+@app.context_processor
+def inject_globals():
+    theme = request.cookies.get("theme", "light")
+    return {"theme": theme, "ALLOWED_REACTIONS": ALLOWED_REACTIONS}
+
+
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
+
+
+def save_image(file_storage, target_dir, max_side=1200):
+    # сохраняет картинку под рандомным именем, большие ужимает
+    if not file_storage or not file_storage.filename:
+        return None
+    if not allowed_file(file_storage.filename):
+        return None
+
+    ext = file_storage.filename.rsplit(".", 1)[1].lower()
+    name = f"{uuid.uuid4().hex}.{ext}"
+    path = os.path.join(target_dir, name)
+    file_storage.save(path)
+
+    # gif-ки не трогаем чтоб анимация не сломалась
+    if HAS_PIL and ext != "gif":
+        try:
+            img = Image.open(path)
+            if max(img.size) > max_side:
+                img.thumbnail((max_side, max_side))
+                img.save(path)
+        except Exception:
+            pass  # не получилось — да и ладно, оригинал на месте
+
+    return name
+
+
+def delete_image(filename, folder):
+    if not filename:
+        return
+    path = os.path.join(folder, filename)
+    if os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
 @app.route("/")
 def main_page():
     sort = request.args.get("sort", "new")
+    feed = request.args.get("feed", "all")
     q = Post.query
+
+    # лента подписок — только посты тех на кого подписан
+    if feed == "following" and current_user.is_authenticated:
+        followed_ids = [f.followed_id for f in current_user.following.all()]
+        if not followed_ids:
+            return render_template("index.html", posts=[], sort=sort, feed=feed)
+        q = q.filter(Post.author_id.in_(followed_ids))
 
     if sort == "top":
         # сортировка по лайкам после to_dict — лень делать subquery, постов будет немного
@@ -46,7 +123,7 @@ def main_page():
         posts_query = q.order_by(Post.post_date.desc()).all()
         posts = [p.to_dict_for_template(current_user) for p in posts_query]
 
-    return render_template("index.html", posts=posts, sort=sort)
+    return render_template("index.html", posts=posts, sort=sort, feed=feed)
 
 
 @app.route("/post/<int:post_id>")
@@ -59,7 +136,14 @@ def show_post(post_id):
 
     post_dict = post_obj.to_dict_for_template(current_user)
     comments = post_obj.comments.all()
-    return render_template("post.html", post=post_dict, comments=comments)
+
+    # к каждому комменту прикладываем сводку реакций
+    comments_data = [
+        {"obj": c, "reactions": c.reactions_summary(current_user)}
+        for c in comments
+    ]
+
+    return render_template("post.html", post=post_dict, comments=comments_data)
 
 
 @app.route("/post/new", methods=["GET", "POST"])
@@ -78,11 +162,20 @@ def new_post():
             flash("Заголовок слишком длинный", "danger")
             return redirect(url_for("new_post"))
 
+        image_name = None
+        file = request.files.get("image")
+        if file and file.filename:
+            if not allowed_file(file.filename):
+                flash("Неподдерживаемый формат картинки", "danger")
+                return redirect(url_for("new_post"))
+            image_name = save_image(file, POST_IMG_DIR)
+
         post = Post(
             title=title,
             text=text,
             category=category,
             author_id=current_user.id,
+            image=image_name,
         )
         db.session.add(post)
         db.session.commit()
@@ -91,6 +184,61 @@ def new_post():
         return redirect(url_for("show_post", post_id=post.id))
 
     return render_template("new_post.html")
+
+
+@app.route("/post/<int:post_id>/edit", methods=["GET", "POST"])
+@login_required
+def edit_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author_id != current_user.id:
+        abort(403)
+
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        text = (request.form.get("text") or "").strip()
+        category = (request.form.get("category") or "").strip() or None
+
+        if not title or not text:
+            flash("Заголовок и текст обязательны", "danger")
+            return redirect(url_for("edit_post", post_id=post.id))
+
+        post.title = title
+        post.text = text
+        post.category = category
+        post.edited_at = datetime.utcnow()
+
+        # галочка «удалить картинку»
+        if request.form.get("remove_image"):
+            delete_image(post.image, POST_IMG_DIR)
+            post.image = None
+
+        # либо если загрузили новую — заменяем (старую с диска тоже сносим)
+        file = request.files.get("image")
+        if file and file.filename:
+            if not allowed_file(file.filename):
+                flash("Неподдерживаемый формат картинки", "danger")
+                return redirect(url_for("edit_post", post_id=post.id))
+            delete_image(post.image, POST_IMG_DIR)
+            post.image = save_image(file, POST_IMG_DIR)
+
+        db.session.commit()
+        flash("Пост обновлён", "success")
+        return redirect(url_for("show_post", post_id=post.id))
+
+    return render_template("edit_post.html", post=post)
+
+
+@app.route("/post/<int:post_id>/delete", methods=["POST"])
+@login_required
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if post.author_id != current_user.id:
+        abort(403)
+    delete_image(post.image, POST_IMG_DIR)
+    db.session.delete(post)
+    db.session.commit()
+    flash("Пост удалён", "info")
+    return redirect(url_for("main_page"))
 
 
 @app.route("/post/<int:post_id>/like", methods=["POST"])
@@ -138,6 +286,48 @@ def delete_comment(comment_id):
     return redirect(url_for("show_post", post_id=post_id))
 
 
+@app.route("/comment/<int:comment_id>/react", methods=["POST"])
+@login_required
+def react_to_comment(comment_id):
+    c = Comment.query.get_or_404(comment_id)
+    emoji = request.form.get("emoji", "")
+    # пускаем только то что в нашем списке, а то юзеры понапихают всякого
+    if emoji not in ALLOWED_REACTIONS:
+        abort(400)
+
+    existing = Reaction.query.filter_by(
+        user_id=current_user.id, comment_id=c.id, emoji=emoji
+    ).first()
+    if existing:
+        db.session.delete(existing)
+    else:
+        db.session.add(Reaction(user_id=current_user.id, comment_id=c.id, emoji=emoji))
+    db.session.commit()
+    # якорь чтоб юзера сразу подкинуло к комменту, а не наверх страницы
+    return redirect(url_for("show_post", post_id=c.post_id) + f"#comment-{c.id}")
+
+
+@app.route("/follow/<int:user_id>", methods=["POST"])
+@login_required
+def follow_user(user_id):
+    user = User.query.get_or_404(user_id)
+    if user.id == current_user.id:
+        flash("На себя подписаться нельзя", "warning")
+        return redirect(url_for("profile", user_id=user.id))
+    current_user.follow(user)
+    db.session.commit()
+    return redirect(request.referrer or url_for("profile", user_id=user.id))
+
+
+@app.route("/unfollow/<int:user_id>", methods=["POST"])
+@login_required
+def unfollow_user(user_id):
+    user = User.query.get_or_404(user_id)
+    current_user.unfollow(user)
+    db.session.commit()
+    return redirect(request.referrer or url_for("profile", user_id=user.id))
+
+
 @app.route("/profile")
 @app.route("/profile/<int:user_id>")
 def profile(user_id=None):
@@ -156,7 +346,13 @@ def profile(user_id=None):
     )
     posts = [p.to_dict_for_template(current_user) for p in user_posts]
 
-    return render_template("profile.html", user=user, posts=posts)
+    is_following = False
+    if current_user.is_authenticated and current_user.id != user.id:
+        is_following = current_user.is_following(user)
+
+    return render_template(
+        "profile.html", user=user, posts=posts, is_following=is_following
+    )
 
 
 @app.route("/profile/edit", methods=["GET", "POST"])
@@ -168,6 +364,20 @@ def edit_profile():
             flash("Био слишком длинное (макс 300)", "danger")
             return redirect(url_for("edit_profile"))
         current_user.bio = bio
+
+        file = request.files.get("avatar")
+        if file and file.filename:
+            if not allowed_file(file.filename):
+                flash("Неподдерживаемый формат аватарки", "danger")
+                return redirect(url_for("edit_profile"))
+            # старую сносим, иначе намусорится
+            delete_image(current_user.avatar, AVATAR_DIR)
+            current_user.avatar = save_image(file, AVATAR_DIR, max_side=400)
+
+        if request.form.get("remove_avatar"):
+            delete_image(current_user.avatar, AVATAR_DIR)
+            current_user.avatar = None
+
         db.session.commit()
         flash("Профиль обновлён", "success")
         return redirect(url_for("profile"))
@@ -240,6 +450,23 @@ def register():
         return redirect(url_for("login"))
 
     return render_template("register.html")
+
+
+@app.route("/toggle-theme", methods=["POST"])
+def toggle_theme():
+    current = request.cookies.get("theme", "light")
+    new_theme = "dark" if current == "light" else "light"
+    resp = make_response(redirect(request.referrer or url_for("main_page")))
+    # год хранится — нормально, не пароль же
+    resp.set_cookie("theme", new_theme, max_age=60 * 60 * 24 * 365)
+    return resp
+
+
+# ловит когда юзер пытается залить слишком жирный файл — Flask кидает 413
+@app.errorhandler(413)
+def too_large(e):
+    flash("Файл слишком большой (макс 5 МБ)", "danger")
+    return redirect(request.referrer or url_for("main_page"))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Редактирование поста{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm mt-3">
+    <div class="card-body p-4">
+        <h3 class="mb-4">Редактирование поста</h3>
+        <form method="post" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label class="form-label">Заголовок</label>
+                <input type="text" name="title" class="form-control" required maxlength="200"
+                       value="{{ post.title }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Категория</label>
+                <input type="text" name="category" class="form-control" maxlength="50"
+                       value="{{ post.category or '' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Текст</label>
+                <textarea name="text" class="form-control" rows="10" required>{{ post.text }}</textarea>
+            </div>
+
+            {% if post.image %}
+                <div class="mb-3">
+                    <label class="form-label">Текущая картинка</label>
+                    <div>
+                        <img src="{{ url_for('static', filename='uploads/posts/' + post.image) }}"
+                             style="max-width: 200px; border-radius: .5rem;" alt="">
+                    </div>
+                    <div class="form-check mt-2">
+                        <input type="checkbox" name="remove_image" id="remove_image" class="form-check-input">
+                        <label for="remove_image" class="form-check-label">Удалить картинку</label>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="mb-3">
+                <label class="form-label">
+                    {% if post.image %}Заменить картинку{% else %}Добавить картинку{% endif %}
+                    <span class="small" style="color: var(--text-muted);">(до 5 МБ)</span>
+                </label>
+                <input type="file" name="image" class="form-control" accept="image/*">
+            </div>
+
+            <button type="submit" class="btn btn-primary">Сохранить</button>
+            <a href="{{ url_for('show_post', post_id=post.id) }}" class="btn btn-link">Отмена</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

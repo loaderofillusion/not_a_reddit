@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="{{ theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,60 +9,176 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
     <style>
-        body {
-            background: #f4f5f7;
+        :root {
+            --bg: #f4f5f7;
+            --card-bg: #ffffff;
+            --card-border: #e6e6e8;
+            --text: #212529;
+            --text-muted: #6c757d;
+            --accent: #0d6efd;
+            --comment-bg: #fafbfc;
+            --comment-border: #dee2e6;
+            --tag-bg: #eef0f3;
+            --tag-text: #495057;
+            --input-bg: #ffffff;
+            --input-border: #ced4da;
         }
-        .navbar-brand {
-            letter-spacing: -0.5px;
+        [data-theme="dark"] {
+            --bg: #15171a;
+            --card-bg: #1f2227;
+            --card-border: #2d3138;
+            --text: #e6e8eb;
+            --text-muted: #8a8f98;
+            --accent: #4a9eff;
+            --comment-bg: #1a1d22;
+            --comment-border: #2d3138;
+            --tag-bg: #2d3138;
+            --tag-text: #b0b5be;
+            --input-bg: #1a1d22;
+            --input-border: #2d3138;
         }
+
+        body { background: var(--bg); color: var(--text); }
+        .card, .alert {
+            background: var(--card-bg);
+            border-color: var(--card-border);
+            color: var(--text);
+        }
+        [data-theme="dark"] .alert-light { background: var(--comment-bg); }
+        [data-theme="dark"] .form-control,
+        [data-theme="dark"] .form-control:focus {
+            background: var(--input-bg);
+            border-color: var(--input-border);
+            color: var(--text);
+        }
+        [data-theme="dark"] .form-control::placeholder { color: var(--text-muted); }
+        [data-theme="dark"] .btn-outline-secondary {
+            color: var(--text-muted);
+            border-color: var(--card-border);
+        }
+        [data-theme="dark"] .btn-outline-secondary:hover {
+            background: var(--card-border);
+            color: var(--text);
+        }
+        [data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
+        [data-theme="dark"] .border-top { border-color: var(--card-border) !important; }
+        [data-theme="dark"] a { color: var(--accent); }
+
+        .navbar-brand { letter-spacing: -0.5px; }
         .post-card {
             transition: transform .12s ease, box-shadow .12s ease;
-            border: 1px solid #e6e6e8;
+            border: 1px solid var(--card-border);
         }
         .post-card:hover {
             transform: translateY(-2px);
             box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important;
         }
-        .like-btn.liked {
-            color: #e0245e;
-            border-color: #e0245e;
+        [data-theme="dark"] .post-card:hover {
+            box-shadow: 0 .5rem 1rem rgba(0,0,0,.5) !important;
         }
+        .like-btn.liked { color: #e0245e; border-color: #e0245e; }
         .category-tag {
             font-size: .75rem;
-            background: #eef0f3;
-            color: #495057;
+            background: var(--tag-bg);
+            color: var(--tag-text);
             padding: 2px 8px;
             border-radius: 12px;
         }
         .comment {
-            border-left: 3px solid #dee2e6;
+            border-left: 3px solid var(--comment-border);
             padding: .5rem .75rem;
             margin-bottom: .75rem;
-            background: #fafbfc;
+            background: var(--comment-bg);
             border-radius: 0 .25rem .25rem 0;
         }
         .empty-state {
             text-align: center;
             padding: 3rem 1rem;
-            color: #6c757d;
+            color: var(--text-muted);
         }
+        .post-image { max-width: 100%; border-radius: .5rem; margin-top: 1rem; }
+        .avatar-img { object-fit: cover; border-radius: 50%; }
+        .avatar-fallback {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--accent);
+            color: white;
+            border-radius: 50%;
+            font-weight: 600;
+        }
+        .reaction-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            margin-right: 4px;
+            border-radius: 12px;
+            background: var(--tag-bg);
+            color: var(--tag-text);
+            font-size: .85rem;
+            border: 1px solid transparent;
+        }
+        .reaction-pill button {
+            background: none; border: none; padding: 0; color: inherit;
+        }
+        .reaction-pill.mine {
+            background: rgba(74, 158, 255, .15);
+            border-color: var(--accent);
+        }
+        .reaction-add {
+            color: var(--text-muted);
+            font-size: .85rem;
+            cursor: pointer;
+            padding: 2px 6px;
+            background: none; border: none;
+        }
+        .reaction-add:hover { color: var(--accent); }
+        .reaction-picker {
+            display: none;
+            position: absolute;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: .5rem;
+            padding: 4px;
+            margin-top: 4px;
+            z-index: 10;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+        }
+        .reaction-picker.open { display: inline-block; }
+        .reaction-picker button {
+            background: none; border: none;
+            font-size: 1.1rem; padding: 4px 6px; cursor: pointer;
+        }
+        .reaction-picker button:hover { background: var(--tag-bg); border-radius: 4px; }
+        .reaction-wrapper { position: relative; display: inline-block; }
     </style>
 </head>
 <body>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
     <div class="container-fluid">
-        <a class="navbar-brand fw-bold" href="{{ url_for('main_page') }}">
-            not_a_reddit
-        </a>
+        <a class="navbar-brand fw-bold" href="{{ url_for('main_page') }}">not_a_reddit</a>
 
         <div class="navbar-nav ms-auto flex-row align-items-center">
+            <form action="{{ url_for('toggle_theme') }}" method="post" class="me-2 d-inline">
+                <button class="btn btn-sm btn-outline-light" title="Сменить тему" type="submit">
+                    {% if theme == 'dark' %}<i class="bi bi-sun"></i>{% else %}<i class="bi bi-moon"></i>{% endif %}
+                </button>
+            </form>
+
             {% if current_user.is_authenticated %}
                 <a class="btn btn-success btn-sm me-2" href="{{ url_for('new_post') }}">
                     <i class="bi bi-plus-lg"></i> Новый пост
                 </a>
-                <a class="nav-link text-light me-2" href="{{ url_for('profile') }}">
-                    <i class="bi bi-person-circle"></i> {{ current_user.nickname }}
+                <a class="nav-link text-light me-2 d-flex align-items-center" href="{{ url_for('profile') }}">
+                    {% if current_user.avatar %}
+                        <img src="{{ url_for('static', filename='uploads/avatars/' + current_user.avatar) }}"
+                             class="avatar-img me-1" style="width:24px;height:24px;">
+                    {% else %}
+                        <i class="bi bi-person-circle me-1"></i>
+                    {% endif %}
+                    {{ current_user.nickname }}
                 </a>
                 <a class="btn btn-outline-light btn-sm" href="{{ url_for('logout') }}">Выйти</a>
             {% else %}
@@ -95,5 +211,22 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('click', function(e) {
+        const addBtn = e.target.closest('.reaction-add');
+        if (addBtn) {
+            const picker = addBtn.nextElementSibling;
+            document.querySelectorAll('.reaction-picker.open').forEach(p => {
+                if (p !== picker) p.classList.remove('open');
+            });
+            picker.classList.toggle('open');
+            e.preventDefault();
+            return;
+        }
+        if (!e.target.closest('.reaction-picker')) {
+            document.querySelectorAll('.reaction-picker.open').forEach(p => p.classList.remove('open'));
+        }
+    });
+</script>
 </body>
 </html>
