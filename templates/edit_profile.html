@@ -42,4 +42,41 @@
         </form>
     </div>
 </div>
+
+<div class="card shadow-sm mt-3">
+    <div class="card-body p-4">
+        <h5 class="mb-2">
+            <i class="bi bi-key"></i> API-токен
+        </h5>
+        <p class="small mb-3" style="color: var(--text-muted);">
+            С токеном можно делать запросы к API из своих скриптов и приложений.
+            <a href="{{ url_for('api_docs') }}">Документация и примеры →</a>
+        </p>
+
+        {% if current_user.api_token %}
+            <div class="alert alert-light border mb-3" style="background: var(--comment-bg);">
+                <div class="small mb-1" style="color: var(--text-muted);">Твой токен:</div>
+                <code style="word-break: break-all; user-select: all; font-size: .85rem;">{{ current_user.api_token }}</code>
+            </div>
+            <form method="post" action="{{ url_for('regenerate_api_token') }}" class="d-inline"
+                  onsubmit="return confirm('Старый токен перестанет работать. Точно сгенерировать новый?')">
+                <button class="btn btn-sm btn-outline-warning" type="submit">
+                    <i class="bi bi-arrow-clockwise"></i> Сгенерировать новый
+                </button>
+            </form>
+            <form method="post" action="{{ url_for('revoke_api_token') }}" class="d-inline"
+                  onsubmit="return confirm('Отозвать токен? API перестанет работать.')">
+                <button class="btn btn-sm btn-outline-danger" type="submit">
+                    <i class="bi bi-x-circle"></i> Отозвать
+                </button>
+            </form>
+        {% else %}
+            <form method="post" action="{{ url_for('regenerate_api_token') }}">
+                <button class="btn btn-sm btn-primary" type="submit">
+                    <i class="bi bi-plus-lg"></i> Сгенерировать токен
+                </button>
+            </form>
+        {% endif %}
+    </div>
+</div>
 {% endblock %}
