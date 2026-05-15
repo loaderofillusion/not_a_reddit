@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Админ: категории{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-2">
+    <a href="{{ url_for('main_page') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> На главную
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body p-4">
+        <h3 class="mb-1">
+            <i class="bi bi-gear-fill text-warning"></i> Категории
+        </h3>
+        <p class="small mb-4" style="color: var(--text-muted);">
+            Категории видны всем юзерам при создании постов и в фильтре на главной.
+            Категорию «Разное» удалить нельзя — туда переезжают посты при удалении других категорий.
+        </p>
+
+        <form method="post" class="mb-4">
+            <input type="hidden" name="action" value="add">
+            <div class="input-group">
+                <input type="text" name="name" class="form-control"
+                       placeholder="Новая категория" required maxlength="50">
+                <button class="btn btn-primary" type="submit">
+                    <i class="bi bi-plus-lg"></i> Добавить
+                </button>
+            </div>
+        </form>
+
+        {% if ALL_CATEGORIES %}
+            <div class="list-group">
+                {% for cat in ALL_CATEGORIES %}
+                    <div class="list-group-item d-flex align-items-center gap-2"
+                         style="background: var(--card-bg); color: var(--text); border-color: var(--card-border);">
+                        <form method="post" class="d-flex flex-grow-1 gap-2">
+                            <input type="hidden" name="action" value="rename">
+                            <input type="hidden" name="id" value="{{ cat.id }}">
+                            <input type="text" name="name" class="form-control form-control-sm"
+                                   value="{{ cat.name }}" maxlength="50" required>
+                            <button class="btn btn-sm btn-outline-secondary" type="submit"
+                                    title="Переименовать">
+                                <i class="bi bi-check2"></i>
+                            </button>
+                        </form>
+                        {% if cat.name != 'Разное' %}
+                            <form method="post"
+                                  onsubmit="return confirm('Удалить категорию &quot;{{ cat.name }}&quot;? Посты из неё переедут в Разное.')">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="id" value="{{ cat.id }}">
+                                <button class="btn btn-sm btn-outline-danger" type="submit"
+                                        title="Удалить">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        {% else %}
+                            <span class="badge bg-secondary" title="Базовая категория, нельзя удалить">
+                                <i class="bi bi-lock-fill"></i>
+                            </span>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p style="color: var(--text-muted);">Нет категорий.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

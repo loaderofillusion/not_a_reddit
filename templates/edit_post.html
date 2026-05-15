@@ -13,12 +13,26 @@
             </div>
             <div class="mb-3">
                 <label class="form-label">Категория</label>
-                <input type="text" name="category" class="form-control" maxlength="50"
-                       value="{{ post.category or '' }}">
+                <select name="category_id" class="form-select" required>
+                    {% for cat in ALL_CATEGORIES %}
+                        <option value="{{ cat.id }}" {% if cat.id == post.category_id %}selected{% endif %}>
+                            {{ cat.name }}
+                        </option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="mb-3">
                 <label class="form-label">Текст</label>
                 <textarea name="text" class="form-control" rows="10" required>{{ post.text }}</textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">
+                    Хэштеги
+                    <span class="small" style="color: var(--text-muted);">(до 5, через пробел или запятую)</span>
+                </label>
+                <input type="text" name="tags" class="form-control"
+                       value="{{ post.tags|map(attribute='name')|join(' ') }}"
+                       placeholder="например: python flask учеба">
             </div>
 
             {% if post.image %}

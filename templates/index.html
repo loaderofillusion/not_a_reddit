@@ -1,83 +1,77 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mt-3 mb-3 flex-wrap gap-2">
-    <div class="btn-group btn-group-sm" role="group">
-        <a href="{{ url_for('main_page', feed='all', sort=sort) }}"
-           class="btn btn-outline-secondary {% if feed == 'all' %}active{% endif %}">
-            Все
-        </a>
-        {% if current_user.is_authenticated %}
-            <a href="{{ url_for('main_page', feed='following', sort=sort) }}"
-               class="btn btn-outline-secondary {% if feed == 'following' %}active{% endif %}">
-                Подписки
+<form method="get" action="{{ url_for('main_page') }}" class="mt-3 mb-3">
+    <div class="input-group">
+        <span class="input-group-text" style="background: var(--card-bg); border-color: var(--input-border); color: var(--text-muted);">
+            <i class="bi bi-search"></i>
+        </span>
+        <input type="text" name="q" class="form-control"
+               placeholder="Поиск по заголовкам, тексту или #хэштегам"
+               value="{{ search or '' }}">
+        {% if search %}
+            <a href="{{ url_for('main_page') }}" class="btn btn-outline-secondary"
+               title="Очистить">
+                <i class="bi bi-x-lg"></i>
             </a>
         {% endif %}
+        <button class="btn btn-primary" type="submit">Найти</button>
     </div>
-    <div class="btn-group btn-group-sm" role="group">
-        <a href="{{ url_for('main_page', sort='new', feed=feed) }}"
-           class="btn btn-outline-secondary {% if sort == 'new' %}active{% endif %}">
-            Новые
+</form>
+
+{% if tag %}
+    <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 mb-3"
+         style="background: var(--comment-bg);">
+        <span>
+            Фильтр по тегу: <a href="#" class="hashtag">#{{ tag }}</a>
+        </span>
+        <a href="{{ url_for('main_page', feed=feed, sort=sort, cat=cat_id) }}"
+           class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-x-lg"></i> Сбросить
         </a>
-        <a href="{{ url_for('main_page', sort='top', feed=feed) }}"
-           class="btn btn-outline-secondary {% if sort == 'top' %}active{% endif %}">
-            Популярные
-        </a>
+    </div>
+{% endif %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="seg-toggle" data-toggle-group="feed">
+        <a href="{{ url_for('main_page', feed='all', sort=sort, cat=cat_id, tag=tag, q=search) }}"
+           data-value="all"
+           class="{% if feed == 'all' %}active{% endif %}">Все</a>
+        {% if current_user.is_authenticated %}
+            <a href="{{ url_for('main_page', feed='following', sort=sort, cat=cat_id, tag=tag, q=search) }}"
+               data-value="following"
+               class="{% if feed == 'following' %}active{% endif %}">Подписки</a>
+        {% endif %}
+    </div>
+    <div class="seg-toggle" data-toggle-group="sort">
+        <a href="{{ url_for('main_page', sort='new', feed=feed, cat=cat_id, tag=tag, q=search) }}"
+           data-value="new"
+           class="{% if sort == 'new' %}active{% endif %}">Новые</a>
+        <a href="{{ url_for('main_page', sort='top', feed=feed, cat=cat_id, tag=tag, q=search) }}"
+           data-value="top"
+           class="{% if sort == 'top' %}active{% endif %}">Популярные</a>
     </div>
 </div>
 
-{% if posts %}
-    {% for post in posts %}
-        <div class="card post-card mb-3 shadow-sm">
-            <div class="card-body p-4">
-                <a href="{{ url_for('show_post', post_id=post.post_id) }}" class="text-decoration-none text-reset">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <h5 class="card-title mb-0">{{ post.title }}</h5>
-                        {% if post.category %}
-                            <span class="category-tag ms-2">{{ post.category }}</span>
-                        {% endif %}
-                    </div>
-                    {% if post.image %}
-                        <img src="{{ url_for('static', filename='uploads/posts/' + post.image) }}"
-                             class="post-image mb-2" alt="">
-                    {% endif %}
-                    <p class="card-text" style="color: var(--text-muted);">
-                        {{ post.text[:250] }}{% if post.text|length > 250 %}...{% endif %}
-                    </p>
-                </a>
-                <div class="d-flex justify-content-between align-items-center mt-3">
-                    <small style="color: var(--text-muted);">
-                        <a href="{{ url_for('profile', user_id=post.author_id) }}"
-                           class="text-decoration-none" style="color: var(--text-muted);">
-                            {{ post.author }}
-                        </a>
-                        • {{ post.time }}
-                        {% if post.edited %} • <i>изменено</i>{% endif %}
-                    </small>
-                    <small style="color: var(--text-muted);">
-                        <i class="bi bi-heart{% if post.liked %}-fill text-danger{% endif %} me-1"></i>{{ post.likes }}
-                        <i class="bi bi-chat-dots ms-3 me-1"></i>{{ post.comments }}
-                        <i class="bi bi-eye ms-3 me-1"></i>{{ post.views }}
-                    </small>
-                </div>
-            </div>
-        </div>
+<div class="category-bar mb-3">
+    <a href="{{ url_for('main_page', feed=feed, sort=sort, tag=tag, q=search) }}"
+       data-value=""
+       class="cat-chip {% if not cat_id %}active{% endif %}">
+        Все категории
+    </a>
+    {% for cat in ALL_CATEGORIES %}
+        <a href="{{ url_for('main_page', feed=feed, sort=sort, cat=cat.id, tag=tag, q=search) }}"
+           data-value="{{ cat.id }}"
+           class="cat-chip {% if cat_id == cat.id %}active{% endif %}">
+            {{ cat.name }}
+        </a>
     {% endfor %}
-{% else %}
-    <div class="empty-state">
-        <i class="bi bi-journal-text" style="font-size: 3rem;"></i>
-        {% if feed == 'following' %}
-            <p class="mt-3 mb-2">В ленте подписок пусто.</p>
-            <p class="mb-2"><small>Подпишись на кого-нибудь, чтобы видеть его посты здесь.</small></p>
-            <a href="{{ url_for('main_page', feed='all') }}" class="btn btn-primary btn-sm">Все посты</a>
-        {% else %}
-            <p class="mt-3 mb-2">Постов пока нет.</p>
-            {% if current_user.is_authenticated %}
-                <a href="{{ url_for('new_post') }}" class="btn btn-primary btn-sm">Написать первый</a>
-            {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">Войти и опубликовать</a>
-            {% endif %}
-        {% endif %}
-    </div>
-{% endif %}
+</div>
+
+<div id="feed-list"
+     data-feed="{{ feed }}" data-sort="{{ sort }}"
+     data-cat="{{ cat_id or '' }}" data-tag="{{ tag or '' }}"
+     data-search="{{ search or '' }}">
+    {% include "_feed_posts.html" %}
+</div>
 {% endblock %}

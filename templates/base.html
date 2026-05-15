@@ -62,7 +62,44 @@
         }
         [data-theme="dark"] .text-muted { color: var(--text-muted) !important; }
         [data-theme="dark"] .border-top { border-color: var(--card-border) !important; }
-        [data-theme="dark"] a { color: var(--accent); }
+        [data-theme="dark"] a:not(.btn):not(.cat-chip):not(.hashtag):not(.category-tag):not(.nav-link) {
+            color: var(--accent);
+        }
+
+        [data-theme="dark"] .navbar .btn-success {
+            background: #2d8a4e;
+            border-color: #2d8a4e;
+            color: #fff;
+        }
+        [data-theme="dark"] .navbar .btn-success:hover {
+            background: #36a35d;
+            border-color: #36a35d;
+            color: #fff;
+        }
+        [data-theme="dark"] .navbar .btn-warning {
+            background: #b8860b;
+            border-color: #b8860b;
+            color: #fff;
+        }
+        [data-theme="dark"] .navbar .btn-warning:hover {
+            background: #d49a0e;
+            border-color: #d49a0e;
+            color: #fff;
+        }
+        [data-theme="dark"] .navbar .btn-outline-light {
+            color: #c8ccd1;
+            border-color: rgba(255,255,255,.25);
+        }
+        [data-theme="dark"] .navbar .btn-outline-light:hover {
+            background: rgba(255,255,255,.08);
+            color: #fff;
+            border-color: rgba(255,255,255,.4);
+        }
+        [data-theme="dark"] .navbar .btn-primary {
+            background: #2563eb;
+            border-color: #2563eb;
+            color: #fff;
+        }
 
         .navbar-brand { letter-spacing: -0.5px; }
         .post-card {
@@ -91,12 +128,37 @@
             background: var(--comment-bg);
             border-radius: 0 .25rem .25rem 0;
         }
+
+        .comment .replies {
+            margin-left: 1.25rem;
+            margin-top: .5rem;
+            padding-left: .25rem;
+        }
+        .reply-btn-toggle:hover { color: var(--accent) !important; }
+        .reply-form {
+            background: var(--bg);
+            border: 1px solid var(--card-border);
+            border-radius: .5rem;
+            padding: .5rem .75rem;
+        }
         .empty-state {
             text-align: center;
             padding: 3rem 1rem;
             color: var(--text-muted);
         }
-        .post-image { max-width: 100%; border-radius: .5rem; margin-top: 1rem; }
+
+        .post-image {
+            max-width: 100%;
+            max-height: 400px;
+            width: auto;
+            object-fit: contain;
+            border-radius: .5rem;
+            margin-top: 1rem;
+            cursor: zoom-in;
+            display: block;
+        }
+        .post-image.thumb { max-height: 220px; }
+
         .avatar-img { object-fit: cover; border-radius: 50%; }
         .avatar-fallback {
             display: inline-flex;
@@ -107,51 +169,299 @@
             border-radius: 50%;
             font-weight: 600;
         }
+
+        .emoji {
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+                         "Twemoji Mozilla", sans-serif;
+            font-style: normal;
+        }
+
+        .reactions-row {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
         .reaction-pill {
             display: inline-flex;
             align-items: center;
             gap: 4px;
-            padding: 2px 8px;
-            margin-right: 4px;
-            border-radius: 12px;
+            padding: 2px 10px;
+            border-radius: 14px;
             background: var(--tag-bg);
-            color: var(--tag-text);
-            font-size: .85rem;
+            color: var(--text);
+            font-size: .9rem;
             border: 1px solid transparent;
+            cursor: pointer;
+            transition: transform .08s ease;
         }
-        .reaction-pill button {
-            background: none; border: none; padding: 0; color: inherit;
-        }
+        .reaction-pill:hover { transform: scale(1.05); }
         .reaction-pill.mine {
             background: rgba(74, 158, 255, .15);
             border-color: var(--accent);
         }
         .reaction-add {
             color: var(--text-muted);
-            font-size: .85rem;
+            font-size: 1rem;
             cursor: pointer;
-            padding: 2px 6px;
-            background: none; border: none;
+            padding: 2px 8px;
+            background: none;
+            border: 1px solid transparent;
+            border-radius: 14px;
         }
-        .reaction-add:hover { color: var(--accent); }
+        .reaction-add:hover {
+            color: var(--accent);
+            border-color: var(--card-border);
+        }
+
+        .reaction-wrapper { position: relative; display: inline-block; }
         .reaction-picker {
             display: none;
             position: absolute;
+            left: 0;
+            top: calc(100% + 6px);
             background: var(--card-bg);
             border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 6px;
+            z-index: 100;
+            box-shadow: 0 6px 20px rgba(0,0,0,.18);
+            width: auto;
+        }
+        .reaction-picker.open {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            flex-wrap: nowrap;
+        }
+        .reaction-picker.open.expanded {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 2px;
+            width: 240px;
+            justify-content: stretch;
+        }
+        .reaction-picker.open.expanded .emoji-form {
+            display: flex;
+            justify-content: center;
+        }
+        .reaction-picker.open.expanded .emoji-btn {
+            width: 100%;
+        }
+        .reaction-picker .collapse-btn {
+            display: none;
+            grid-column: 1 / -1;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-size: 1rem;
+            margin-top: 2px;
+            cursor: pointer;
+        }
+        .reaction-picker.expanded .collapse-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .reaction-picker .collapse-btn:hover {
+            background: var(--tag-bg);
+            color: var(--accent);
+        }
+
+        .reaction-picker .emoji-form {
+            display: inline-block;
+            margin: 0;
+            line-height: 1;
+        }
+        .reaction-picker .emoji-form.is-hidden { display: none; }
+        .reaction-picker.expanded .emoji-form.is-hidden { display: flex; }
+        .reaction-picker.expanded .expand-btn { display: none; }
+
+        .reaction-picker .emoji-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            padding: 6px;
+            cursor: pointer;
+            border-radius: 8px;
+            line-height: 1;
+            transition: transform .08s ease;
+            font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji",
+                         "Twemoji Mozilla", sans-serif;
+        }
+        .reaction-picker .emoji-btn:hover {
+            background: var(--tag-bg);
+            transform: scale(1.2);
+        }
+        .reaction-picker .expand-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 1rem;
+            display: inline-flex;
+            align-items: center;
+        }
+        .reaction-picker .expand-btn:hover {
+            background: var(--tag-bg);
+            color: var(--accent);
+        }
+
+        .seg-toggle {
+            display: inline-flex;
+            background: var(--tag-bg);
+            border-radius: 10px;
+            padding: 3px;
+            position: relative;
+        }
+        .seg-toggle a {
+            text-decoration: none;
+            color: var(--text-muted);
+            padding: 6px 16px;
+            border-radius: 8px;
+            font-size: .9rem;
+            font-weight: 500;
+            transition: color .2s ease, background .25s cubic-bezier(.4, 0, .2, 1),
+                        box-shadow .25s ease;
+            white-space: nowrap;
+            background: transparent;
+        }
+        .seg-toggle a.active {
+            background: var(--card-bg);
+            color: var(--text);
+            box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 0 0 .5px rgba(0,0,0,.04);
+        }
+        [data-theme="dark"] .seg-toggle a.active {
+            box-shadow: 0 1px 4px rgba(0,0,0,.5);
+        }
+        .seg-toggle a:hover:not(.active) {
+            color: var(--text);
+        }
+
+        #feed-list {
+            transition: opacity .15s ease;
+        }
+        #feed-list.loading {
+            opacity: .35;
+            pointer-events: none;
+        }
+
+        .category-bar {
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            padding: 4px 0;
+            scrollbar-width: thin;
+        }
+        .category-bar::-webkit-scrollbar { height: 4px; }
+        .category-bar::-webkit-scrollbar-thumb {
+            background: var(--card-border);
+            border-radius: 4px;
+        }
+        .cat-chip {
+            display: inline-flex;
+            align-items: center;
+            padding: 6px 14px;
+            background: var(--tag-bg);
+            color: var(--tag-text);
+            border-radius: 16px;
+            text-decoration: none;
+            font-size: .85rem;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: background .15s ease, color .15s ease, transform .08s ease;
+            border: 1px solid transparent;
+        }
+        .cat-chip:hover {
+            background: var(--card-border);
+            color: var(--text);
+            transform: translateY(-1px);
+        }
+        .cat-chip.active {
+            background: var(--accent);
+            color: white;
+        }
+        [data-theme="dark"] .cat-chip.active {
+            color: white;
+        }
+
+        a.category-tag {
+            transition: background .15s ease;
+        }
+        a.category-tag:hover {
+            background: var(--card-border);
+        }
+
+        .hashtag {
+            display: inline-block;
+            color: var(--accent);
+            text-decoration: none;
+            font-size: .85rem;
+            margin-right: 6px;
+            margin-bottom: 4px;
+            transition: opacity .12s ease;
+        }
+        .hashtag:hover {
+            opacity: .7;
+            text-decoration: underline;
+        }
+
+        .lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.92);
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .lightbox.open { display: flex; }
+        .lightbox img {
+            max-width: 95vw;
+            max-height: 80vh;
             border-radius: .5rem;
-            padding: 4px;
-            margin-top: 4px;
-            z-index: 10;
-            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            box-shadow: 0 10px 40px rgba(0,0,0,.5);
         }
-        .reaction-picker.open { display: inline-block; }
-        .reaction-picker button {
-            background: none; border: none;
-            font-size: 1.1rem; padding: 4px 6px; cursor: pointer;
+        .lightbox .close-x {
+            position: absolute;
+            top: 16px;
+            right: 24px;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            z-index: 2;
         }
-        .reaction-picker button:hover { background: var(--tag-bg); border-radius: 4px; }
-        .reaction-wrapper { position: relative; display: inline-block; }
+        .lightbox-controls {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            max-width: 95vw;
+        }
+        .ocr-result {
+            display: none;
+            margin-top: .5rem;
+            padding: .75rem 1rem;
+            background: white;
+            color: #212529;
+            border-radius: .5rem;
+            font-size: .95rem;
+            white-space: pre-wrap;
+            max-height: 30vh;
+            max-width: 600px;
+            overflow-y: auto;
+            user-select: text;
+        }
+        .ocr-result.shown { display: block; }
     </style>
 </head>
 <body>
@@ -171,6 +481,12 @@
                 <a class="btn btn-success btn-sm me-2" href="{{ url_for('new_post') }}">
                     <i class="bi bi-plus-lg"></i> Новый пост
                 </a>
+                {% if current_user.is_admin %}
+                    <a class="btn btn-warning btn-sm me-2" href="{{ url_for('admin_categories') }}"
+                       title="Админ-панель">
+                        <i class="bi bi-gear-fill"></i>
+                    </a>
+                {% endif %}
                 <a class="nav-link text-light me-2 d-flex align-items-center" href="{{ url_for('profile') }}">
                     {% if current_user.avatar %}
                         <img src="{{ url_for('static', filename='uploads/avatars/' + current_user.avatar) }}"
@@ -189,9 +505,9 @@
     </div>
 </nav>
 
-<div class="container-fluid mt-5 pt-4">
+<div class="container mt-5 pt-4">
     <div class="row justify-content-center">
-        <div class="col-lg-8 col-md-10">
+        <div class="col-xl-7 col-lg-8 col-md-10">
 
             {% with messages = get_flashed_messages(with_categories=true) %}
                 {% if messages %}
@@ -210,21 +526,489 @@
     </div>
 </div>
 
+<div class="lightbox" id="lightbox">
+    <button class="close-x" type="button" aria-label="Закрыть">&times;</button>
+    <img src="" alt="">
+    <div class="lightbox-controls">
+        <button class="btn btn-light btn-sm ocr-btn" type="button">
+            <i class="bi bi-textarea-t"></i> Распознать текст
+        </button>
+        <div class="ocr-result"></div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
+    {% if current_user.is_authenticated %}
+        window.__CURRENT_USER_ID__ = {{ current_user.id }};
+    {% else %}
+        window.__CURRENT_USER_ID__ = null;
+    {% endif %}
+
+    // Lightbox + интегрированный OCR
+    (function() {
+        const box = document.getElementById('lightbox');
+        const img = box.querySelector('img');
+        const ocrBtn = box.querySelector('.ocr-btn');
+        const ocrResult = box.querySelector('.ocr-result');
+        const closeBtn = box.querySelector('.close-x');
+
+        function open(src) {
+            img.src = src;
+            ocrBtn.dataset.imageUrl = src;
+            //сбрасываем прошлый результат OCR при открытии новой картинки
+            ocrResult.classList.remove('shown');
+            ocrResult.textContent = '';
+            ocrBtn.disabled = false;
+            ocrBtn.innerHTML = '<i class="bi bi-textarea-t"></i> Распознать текст';
+            box.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+        function close() {
+            box.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        document.addEventListener('click', function(e) {
+            const t = e.target;
+            //в ленте картинки обёрнуты в ссылку на пост 
+            if (t.matches('.post-image') && !t.closest('a')) {
+                open(t.src);
+                return;
+            }
+            //закрытие - крестик или клик по фону
+            if (t === closeBtn || (t === box)) {
+                close();
+            }
+        });
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && box.classList.contains('open')) close();
+        });
+    })();
+
+    //OCR грузим только когда юзер нажмёт кнопку 
+    let tesseractLoaded = false;
+    function loadTesseract() {
+        if (tesseractLoaded) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+            s.onload = () => { tesseractLoaded = true; resolve(); };
+            s.onerror = reject;
+            document.head.appendChild(s);
+        });
+    }
+
+    document.addEventListener('click', async function(e) {
+        const btn = e.target.closest('.ocr-btn');
+        if (!btn) return;
+        e.preventDefault();
+
+        const imgUrl = btn.dataset.imageUrl;
+        const resultBox = btn.parentElement.querySelector('.ocr-result');
+
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Загружаю движок...';
+
+        try {
+            await loadTesseract();
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Распознаю...';
+            const { data: { text } } = await Tesseract.recognize(imgUrl, 'rus+eng', {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' +
+                            Math.round(m.progress * 100) + '%';
+                    }
+                }
+            });
+            const cleaned = text.trim();
+            resultBox.textContent = cleaned || '(на картинке не нашлось текста)';
+            resultBox.classList.add('shown');
+            btn.innerHTML = '<i class="bi bi-check2"></i> Готово';
+        } catch (err) {
+            console.error(err);
+            resultBox.textContent = 'Не получилось распознать. Попробуй другую картинку.';
+            resultBox.classList.add('shown');
+            btn.innerHTML = '<i class="bi bi-textarea-t"></i> Распознать текст';
+            btn.disabled = false;
+        }
+    });
+
+    //отправка коммента или ответа — без перезагрузки
+    document.addEventListener('submit', async function(e) {
+        const form = e.target;
+        if (!form.matches('.comment-form')) return;
+        e.preventDefault();
+
+        const textarea = form.querySelector('textarea[name=text]');
+        const text = textarea.value.trim();
+        if (!text) return;
+
+        const isReply = form.classList.contains('reply-form');
+        const parentId = form.dataset.parentId;
+        const postId = form.dataset.postId;
+
+        const submitBtn = form.querySelector('button[type=submit]');
+        submitBtn.disabled = true;
+
+        try {
+            const body = new URLSearchParams();
+            body.set('text', text);
+            if (parentId) body.set('parent_id', parentId);
+
+            const resp = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: body.toString(),
+            });
+            if (!resp.ok) {
+                submitBtn.disabled = false;
+                return;
+            }
+            const data = await resp.json();
+
+            //куда вставить
+            let list;
+            let depth = 0;
+            if (isReply) {
+                //ответ - в контейнер .replies-N. Если ещё нет, создадим
+                const parent = document.querySelector('#comment-' + parentId);
+                let replies = parent ? parent.querySelector(':scope > .replies') : null;
+                if (parent && !replies) {
+                    replies = document.createElement('div');
+                    replies.className = 'replies mt-3';
+                    replies.id = 'replies-' + parentId;
+                    parent.appendChild(replies);
+                }
+                list = replies;
+                // глубину считаем по классу родителя
+                if (parent) {
+                    const m = parent.className.match(/depth-(\d+)/);
+                    if (m) depth = parseInt(m[1], 10) + 1;
+                    if (depth > 2) depth = 2;
+                }
+                // ответы внутри ветки — старые сверху, новые снизу
+                if (list) list.insertAdjacentHTML('beforeend', renderComment(data, postId, depth));
+            } else {
+                //корневой - в общий список, новые сверху
+                list = document.querySelector('#' + form.dataset.target);
+                if (list) list.insertAdjacentHTML('afterbegin', renderComment(data, postId, 0));
+            }
+
+            //обновляем счётчик
+            document.querySelectorAll('[data-comment-count="' + postId + '"]')
+                .forEach(el => el.textContent = data.comments_count);
+            textarea.value = '';
+
+            const empty = document.querySelector('.no-comments');
+            if (empty) empty.remove();
+
+            if (isReply) form.style.display = 'none';
+        } catch (err) {
+            console.error('comment failed', err);
+        }
+        submitBtn.disabled = false;
+    });
+
+    //открытие/закрытие формы ответа на коммент
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest('.reply-btn-toggle');
+        if (btn) {
+            const cid = btn.dataset.commentId;
+            const comment = document.querySelector('#comment-' + cid);
+            if (!comment) return;
+            const form = comment.querySelector(':scope > .reply-form');
+            if (form) {
+                const wasHidden = form.style.display === 'none' || !form.style.display;
+                form.style.display = wasHidden ? 'block' : 'none';
+                if (wasHidden) {
+                    const ta = form.querySelector('textarea');
+                    if (ta) ta.focus();
+                }
+            }
+            e.preventDefault();
+            return;
+        }
+        const cancel = e.target.closest('.reply-cancel');
+        if (cancel) {
+            const form = cancel.closest('.reply-form');
+            if (form) {
+                form.style.display = 'none';
+                const ta = form.querySelector('textarea');
+                if (ta) ta.value = '';
+            }
+            e.preventDefault();
+        }
+    });
+
+    function renderComment(c, postId, depth) {
+        depth = depth || 0;
+        const date = escapeHtml(c.time);
+        const author = escapeHtml(c.author);
+        const text = escapeHtml(c.text);
+        //если глубина уже = 2, то без реплая
+        const canReply = depth < 2 && window.__CURRENT_USER_ID__;
+        const replyBlock = canReply ? `
+            <div class="mt-2">
+                <button class="reply-btn-toggle btn btn-sm p-0 border-0"
+                        style="color: var(--text-muted); background: none; font-size: .85rem;"
+                        type="button" data-comment-id="${c.id}">
+                    <i class="bi bi-reply"></i> Ответить
+                </button>
+            </div>
+            <form action="/post/${postId}/comment" method="post"
+                  class="comment-form reply-form mt-2"
+                  data-post-id="${postId}" data-parent-id="${c.id}"
+                  style="display: none;">
+                <input type="hidden" name="parent_id" value="${c.id}">
+                <textarea name="text" class="form-control form-control-sm mb-2" rows="2"
+                          placeholder="Твой ответ..." required maxlength="1000"></textarea>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm">Ответить</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary reply-cancel">Отмена</button>
+                </div>
+            </form>` : '';
+        return `<div class="comment depth-${depth}" id="comment-${c.id}" data-comment-id="${c.id}">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <a href="/profile/${c.author_id}" class="text-decoration-none fw-semibold">${author}</a>
+                    <span class="small ms-2" style="color: var(--text-muted);">${date}</span>
+                </div>
+            </div>
+            <div class="mt-1" style="white-space: pre-wrap;">${text}</div>
+            ${replyBlock}
+        </div>`;
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/[&<>"']/g, ch => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[ch]));
+    }
+
+    //открыть/закрыть блок комментов в карточке ленты и подгрузить их
+    document.addEventListener('click', async function(e) {
+        const btn = e.target.closest('.toggle-comments-btn');
+        if (!btn) return;
+        e.preventDefault();
+
+        const postId = btn.dataset.postId;
+        const block = document.querySelector('#comments-feed-' + postId);
+        if (!block) return;
+
+        const isOpen = block.classList.contains('open');
+        if (isOpen) {
+            block.classList.remove('open');
+            block.style.display = 'none';
+            return;
+        }
+
+        block.classList.add('open');
+        block.style.display = 'block';
+
+        //если ещё не загружали - подтянуть
+        const list = block.querySelector('.comments-list');
+        if (list && !list.dataset.loaded) {
+            try {
+                const resp = await fetch('/post/' + postId + '/comments');
+                const data = await resp.json();
+                list.innerHTML = data.comments.length
+                    ? data.comments.map(c => renderComment(c, postId)).join('')
+                    : '<p class="small mb-0 no-comments" style="color: var(--text-muted);">Пока тихо. Будь первым.</p>';
+                list.dataset.loaded = '1';
+            } catch (err) {
+                console.error('load comments failed', err);
+            }
+        }
+    });
+
+    //переключатели ленты (все/Подписки, говые/Популярные, категории) - без перезагрузки
+    document.addEventListener('click', async function(e) {
+        const link = e.target.closest('.seg-toggle a, .cat-chip');
+        if (!link) return;
+        if (link.classList.contains('active')) {
+            e.preventDefault();
+            return;
+        }
+        e.preventDefault();
+
+        //подсветка клика
+        if (link.classList.contains('cat-chip')) {
+            document.querySelectorAll('.cat-chip').forEach(a => a.classList.remove('active'));
+        } else {
+            const group = link.parentElement;
+            group.querySelectorAll('a').forEach(a => a.classList.remove('active'));
+        }
+        link.classList.add('active');
+
+        const feedList = document.querySelector('#feed-list');
+        if (!feedList) return;
+        feedList.classList.add('loading');
+
+        try {
+            const resp = await fetch(link.href, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!resp.ok) {
+                window.location.href = link.href;
+                return;
+            }
+            const html = await resp.text();
+            feedList.innerHTML = html;
+            window.history.replaceState({}, '', link.href);
+            updateToggleLinks();
+        } catch (err) {
+            window.location.href = link.href;
+            return;
+        }
+        feedList.classList.remove('loading');
+    });
+
+    function updateToggleLinks() {
+        const feedActive = document.querySelector('.seg-toggle[data-toggle-group="feed"] a.active');
+        const sortActive = document.querySelector('.seg-toggle[data-toggle-group="sort"] a.active');
+        const catActive = document.querySelector('.cat-chip.active');
+        const feedList = document.querySelector('#feed-list');
+        const feed = feedActive ? feedActive.dataset.value : 'all';
+        const sort = sortActive ? sortActive.dataset.value : 'new';
+        const cat = catActive ? catActive.dataset.value : '';
+        //tag и q берём из feed-list (они сохраняются в data-атрибутах)
+        const tag = feedList ? (feedList.dataset.tag || '') : '';
+        const q = feedList ? (feedList.dataset.search || '') : '';
+
+        const buildUrl = (params) => {
+            const u = new URL('/', window.location.origin);
+            for (const [k, v] of Object.entries(params)) {
+                if (v) u.searchParams.set(k, v);
+            }
+            return u.pathname + u.search;
+        };
+
+        document.querySelectorAll('.seg-toggle[data-toggle-group="feed"] a').forEach(a => {
+            a.href = buildUrl({ feed: a.dataset.value, sort, cat, tag, q });
+        });
+        document.querySelectorAll('.seg-toggle[data-toggle-group="sort"] a').forEach(a => {
+            a.href = buildUrl({ sort: a.dataset.value, feed, cat, tag, q });
+        });
+        document.querySelectorAll('.cat-chip').forEach(a => {
+            a.href = buildUrl({ feed, sort, cat: a.dataset.value, tag, q });
+        });
+    }
+
+    //лайки через fetch, без перезагрузки
+    document.addEventListener('submit', async function(e) {
+        const form = e.target;
+        if (!form.matches('.like-form')) return;
+        e.preventDefault();
+
+        try {
+            const resp = await fetch(form.action, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const btn = form.querySelector('button');
+            btn.querySelector('.like-count').textContent = data.count;
+            const icon = btn.querySelector('i.bi');
+            if (data.liked) {
+                btn.classList.add('liked', 'btn-outline-danger');
+                btn.classList.remove('btn-outline-secondary');
+                icon.classList.remove('bi-heart');
+                icon.classList.add('bi-heart-fill');
+            } else {
+                btn.classList.remove('liked', 'btn-outline-danger');
+                btn.classList.add('btn-outline-secondary');
+                icon.classList.add('bi-heart');
+                icon.classList.remove('bi-heart-fill');
+            }
+        } catch (err) {
+            console.error('like failed', err);
+        }
+    });
+
+    //реакции через fetch, без перезагрузки
+    (function() {
+        document.addEventListener('submit', async function(e) {
+            const form = e.target;
+            if (!form.matches('.react-form')) return;
+            e.preventDefault();
+
+            const commentId = form.dataset.commentId;
+            const emoji = form.querySelector('input[name=emoji]').value;
+            const container = document.querySelector('#reactions-' + commentId);
+
+            try {
+                const resp = await fetch(form.action, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: 'emoji=' + encodeURIComponent(emoji),
+                });
+                if (!resp.ok) return;
+                const data = await resp.json();
+                renderReactions(container, data.reactions, commentId, form.action);
+            } catch (err) {
+                console.error('reaction failed', err);
+            }
+            const picker = form.closest('.reaction-picker');
+            if (picker) picker.classList.remove('open', 'expanded');
+        });
+
+        function renderReactions(container, reactions, commentId, actionUrl) {
+            container.querySelectorAll('.reaction-pill').forEach(el => el.remove());
+            const addBtn = container.querySelector('.reaction-wrapper');
+
+            reactions.forEach(r => {
+                const pill = document.createElement('form');
+                pill.className = 'reaction-pill react-form' + (r.mine ? ' mine' : '');
+                pill.method = 'post';
+                pill.action = actionUrl;
+                pill.dataset.commentId = commentId;
+                pill.innerHTML =
+                    '<input type="hidden" name="emoji" value="' + r.emoji + '">' +
+                    '<button type="submit" style="background:none;border:none;padding:0;color:inherit;">' +
+                    '<span class="emoji">' + r.emoji + '</span> ' + r.count + '</button>';
+                container.insertBefore(pill, addBtn);
+            });
+        }
+    })();
+
+    //открытие/закрытие пикера + стрелочка "показать все"
     document.addEventListener('click', function(e) {
         const addBtn = e.target.closest('.reaction-add');
         if (addBtn) {
             const picker = addBtn.nextElementSibling;
             document.querySelectorAll('.reaction-picker.open').forEach(p => {
-                if (p !== picker) p.classList.remove('open');
+                if (p !== picker) p.classList.remove('open', 'expanded');
             });
             picker.classList.toggle('open');
             e.preventDefault();
             return;
         }
+        const expand = e.target.closest('.expand-btn');
+        if (expand) {
+            const picker = expand.closest('.reaction-picker');
+            picker.classList.add('expanded');
+            e.preventDefault();
+            return;
+        }
+        const collapse = e.target.closest('.collapse-btn');
+        if (collapse) {
+            const picker = collapse.closest('.reaction-picker');
+            picker.classList.remove('expanded');
+            e.preventDefault();
+            return;
+        }
         if (!e.target.closest('.reaction-picker')) {
-            document.querySelectorAll('.reaction-picker.open').forEach(p => p.classList.remove('open'));
+            document.querySelectorAll('.reaction-picker.open').forEach(p =>
+                p.classList.remove('open', 'expanded'));
         }
     });
 </script>

@@ -1,6 +1,6 @@
 from flask import (
     Flask, render_template, request, redirect, url_for,
-    flash, abort, make_response,
+    flash, abort, make_response, jsonify,
 )
 from flask_login import (
     LoginManager,
@@ -11,11 +11,13 @@ from flask_login import (
 )
 from datetime import datetime
 import os
+import re
 import uuid
 
-from models import db, User, Post, Like, Comment, Follow, Reaction, ALLOWED_REACTIONS
+from models import db, User, Post, Like, Comment, Follow, Reaction, Category, Tag, ALLOWED_REACTIONS
+from functools import wraps
 
-# Pillow юзаем для ресайза, без него тоже работает — просто без ресайза
+#Pillow юзаем для ресайза, без него тоже работает — просто без ресайза
 try:
     from PIL import Image
     HAS_PIL = True
@@ -36,6 +38,10 @@ os.makedirs(POST_IMG_DIR, exist_ok=True)
 
 ALLOWED_EXT = {"png", "jpg", "jpeg", "gif", "webp"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024
+#не больше 3 реакций от одного юзера на один коммент. Новая выкидывает самую старую
+MAX_REACTIONS_PER_USER = 3
+#и не больше 5 тегов на пост
+MAX_TAGS_PER_POST = 5
 
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "very-secret-key")
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
@@ -55,11 +61,26 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 
-# чтобы тема и список реакций были доступны во всех шаблонах без отдельной передачи
+#чтобы тема и список реакций были доступны во всех шаблонах без отдельной передачи
 @app.context_processor
 def inject_globals():
     theme = request.cookies.get("theme", "light")
-    return {"theme": theme, "ALLOWED_REACTIONS": ALLOWED_REACTIONS}
+    categories = Category.query.order_by(Category.sort_order, Category.id).all()
+    return {
+        "theme": theme,
+        "ALLOWED_REACTIONS": ALLOWED_REACTIONS,
+        "ALL_CATEGORIES": categories,
+    }
+
+
+def admin_required(f):
+    """пропускает только админов, иначе 403"""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin:
+            abort(403)
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def allowed_file(filename):
@@ -67,7 +88,7 @@ def allowed_file(filename):
 
 
 def save_image(file_storage, target_dir, max_side=1200):
-    # сохраняет картинку под рандомным именем, большие ужимает
+    #сохраняет картинку под рандомным именем, большие ужимает
     if not file_storage or not file_storage.filename:
         return None
     if not allowed_file(file_storage.filename):
@@ -78,7 +99,7 @@ def save_image(file_storage, target_dir, max_side=1200):
     path = os.path.join(target_dir, name)
     file_storage.save(path)
 
-    # gif-ки не трогаем чтоб анимация не сломалась
+    #gif-ки не трогаем чтоб анимация не сломалась
     if HAS_PIL and ext != "gif":
         try:
             img = Image.open(path)
@@ -86,7 +107,7 @@ def save_image(file_storage, target_dir, max_side=1200):
                 img.thumbnail((max_side, max_side))
                 img.save(path)
         except Exception:
-            pass  # не получилось — да и ладно, оригинал на месте
+            pass
 
     return name
 
@@ -102,48 +123,121 @@ def delete_image(filename, folder):
             pass
 
 
+#принимает сырую строку из формы вида "python flask #учеба, #help"
+#возвращает чистый список нормализованных тегов без дублей, не больше MAX_TAGS_PER_POST
+_tag_clean_re = re.compile(r"[^\w\d]+", re.UNICODE)
+
+
+def parse_tags(raw):
+    if not raw:
+        return []
+    #делим по пробелам/запятым/новым строкам, убираем #
+    parts = re.split(r"[\s,]+", raw.strip())
+    result = []
+    seen = set()
+    for p in parts:
+        p = p.lstrip("#").lower()
+        #выкидываем мусорные символы, оставляя буквы/цифры/_
+        p = _tag_clean_re.sub("_", p).strip("_")
+        if not p or len(p) > 40:
+            continue
+        if p in seen:
+            continue
+        seen.add(p)
+        result.append(p)
+        if len(result) >= MAX_TAGS_PER_POST:
+            break
+    return result
+
+
+def attach_tags_to_post(post, tag_names):
+    """применяет список имён тегов к посту: создаёт новые если нужно, очищает старые"""
+    new_tags = []
+    for name in tag_names:
+        t = Tag.query.filter_by(name=name).first()
+        if not t:
+            t = Tag(name=name)
+            db.session.add(t)
+            db.session.flush()  #чтоб id появился
+        new_tags.append(t)
+    post.tags = new_tags
+
+
 @app.route("/")
 def main_page():
     sort = request.args.get("sort", "new")
     feed = request.args.get("feed", "all")
+    cat_id = request.args.get("cat", type=int)
+    tag = (request.args.get("tag") or "").strip().lstrip("#").lower()
+    search = (request.args.get("q") or "").strip()
     q = Post.query
 
-    # лента подписок — только посты тех на кого подписан
+    #фильтр по категории если выбрана
+    if cat_id:
+        q = q.filter(Post.category_id == cat_id)
+
+    #фильтр по конкретному тегу (точное совпадение по имени)
+    if tag:
+        q = q.join(Post.tags).filter(Tag.name == tag)
+
+    #поиск по тексту/заголовку/тегам
+    if search:
+        #ищем по полю title, text - и по совпадению с тегом если в запросе # или просто слово
+        like = f"%{search}%"
+        tag_q = search.lstrip("#").lower()
+        q = q.outerjoin(Post.tags).filter(
+            db.or_(
+                Post.title.ilike(like),
+                Post.text.ilike(like),
+                Tag.name == tag_q,
+            )
+        ).distinct()
+
+    #лента подписок — только посты тех на кого подписан
+    posts = []
     if feed == "following" and current_user.is_authenticated:
         followed_ids = [f.followed_id for f in current_user.following.all()]
-        if not followed_ids:
-            return render_template("index.html", posts=[], sort=sort, feed=feed)
-        q = q.filter(Post.author_id.in_(followed_ids))
+        if followed_ids:
+            q = q.filter(Post.author_id.in_(followed_ids))
+        else:
+            q = None
 
-    if sort == "top":
-        # сортировка по лайкам после to_dict — лень делать subquery, постов будет немного
-        posts = [p.to_dict_for_template(current_user) for p in q.all()]
-        posts.sort(key=lambda p: p["likes"], reverse=True)
-    else:
-        posts_query = q.order_by(Post.post_date.desc()).all()
-        posts = [p.to_dict_for_template(current_user) for p in posts_query]
+    if q is not None:
+        if sort == "top":
+            #сортировка по лайкам после to_dict - лень делать subquery, постов будет немного
+            posts = [p.to_dict_for_template(current_user) for p in q.all()]
+            posts.sort(key=lambda p: p["likes"], reverse=True)
+        else:
+            posts_query = q.order_by(Post.post_date.desc()).all()
+            posts = [p.to_dict_for_template(current_user) for p in posts_query]
 
-    return render_template("index.html", posts=posts, sort=sort, feed=feed)
+    ctx = dict(posts=posts, sort=sort, feed=feed, cat_id=cat_id, tag=tag, search=search)
+    #для AJAX - только список карточек, без обвязки
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return render_template("_feed_posts.html", **ctx)
+
+    return render_template("index.html", **ctx)
 
 
 @app.route("/post/<int:post_id>")
 def show_post(post_id):
     post_obj = Post.query.get_or_404(post_id)
 
-    # инкрементим просмотры на каждый заход. На накрутки забиваем — не та задача
-    post_obj.views = (post_obj.views or 0) + 1
-    db.session.commit()
+    if not current_user.is_authenticated or current_user.id != post_obj.author_id:
+        post_obj.views = (post_obj.views or 0) + 1
+        db.session.commit()
 
     post_dict = post_obj.to_dict_for_template(current_user)
-    comments = post_obj.comments.all()
+    #отдаём только верхний уровень, шаблон сам рекурсивно проходит по replies
+    root_comments = post_obj.root_comments()
+    comments_count = post_obj.comments_count()
 
-    # к каждому комменту прикладываем сводку реакций
-    comments_data = [
-        {"obj": c, "reactions": c.reactions_summary(current_user)}
-        for c in comments
-    ]
-
-    return render_template("post.html", post=post_dict, comments=comments_data)
+    return render_template(
+        "post.html",
+        post=post_dict,
+        root_comments=root_comments,
+        comments_count=comments_count,
+    )
 
 
 @app.route("/post/new", methods=["GET", "POST"])
@@ -152,7 +246,7 @@ def new_post():
     if request.method == "POST":
         title = (request.form.get("title") or "").strip()
         text = (request.form.get("text") or "").strip()
-        category = (request.form.get("category") or "").strip() or None
+        cat_id = request.form.get("category_id", type=int)
 
         if not title or not text:
             flash("Заголовок и текст обязательны", "danger")
@@ -160,6 +254,14 @@ def new_post():
 
         if len(title) > 200:
             flash("Заголовок слишком длинный", "danger")
+            return redirect(url_for("new_post"))
+
+        #категория обязательна - если не выбрана или невалидна, ставим "Разное"
+        category = Category.query.get(cat_id) if cat_id else None
+        if not category:
+            category = Category.query.filter_by(name="Разное").first()
+        if not category:
+            flash("Нет ни одной категории — попроси админа добавить", "danger")
             return redirect(url_for("new_post"))
 
         image_name = None
@@ -173,11 +275,17 @@ def new_post():
         post = Post(
             title=title,
             text=text,
-            category=category,
+            category_id=category.id,
             author_id=current_user.id,
             image=image_name,
         )
         db.session.add(post)
+        db.session.flush()  #чтоб у поста появился id перед привязкой тегов
+
+        #теги
+        tag_names = parse_tags(request.form.get("tags"))
+        attach_tags_to_post(post, tag_names)
+
         db.session.commit()
 
         flash("Пост опубликован", "success")
@@ -196,23 +304,28 @@ def edit_post(post_id):
     if request.method == "POST":
         title = (request.form.get("title") or "").strip()
         text = (request.form.get("text") or "").strip()
-        category = (request.form.get("category") or "").strip() or None
+        cat_id = request.form.get("category_id", type=int)
 
         if not title or not text:
             flash("Заголовок и текст обязательны", "danger")
             return redirect(url_for("edit_post", post_id=post.id))
 
+        #категория обязательна - если не выбрана, оставляем текущую
+        if cat_id:
+            new_cat = Category.query.get(cat_id)
+            if new_cat:
+                post.category_id = new_cat.id
+
         post.title = title
         post.text = text
-        post.category = category
         post.edited_at = datetime.utcnow()
 
-        # галочка «удалить картинку»
+        #галочка «удалить картинку»
         if request.form.get("remove_image"):
             delete_image(post.image, POST_IMG_DIR)
             post.image = None
 
-        # либо если загрузили новую — заменяем (старую с диска тоже сносим)
+        #либо если загрузили новую - заменяем (старую с диска тоже сносим)
         file = request.files.get("image")
         if file and file.filename:
             if not allowed_file(file.filename):
@@ -220,6 +333,10 @@ def edit_post(post_id):
                 return redirect(url_for("edit_post", post_id=post.id))
             delete_image(post.image, POST_IMG_DIR)
             post.image = save_image(file, POST_IMG_DIR)
+
+        #теги - полностью перепривязываем
+        tag_names = parse_tags(request.form.get("tags"))
+        attach_tags_to_post(post, tag_names)
 
         db.session.commit()
         flash("Пост обновлён", "success")
@@ -246,13 +363,36 @@ def delete_post(post_id):
 def like_post(post_id):
     post = Post.query.get_or_404(post_id)
     existing = Like.query.filter_by(user_id=current_user.id, post_id=post.id).first()
-    # уже лайкал — снимаем, иначе ставим. Тогл по сути
+    #уже лайкал - снимаем, иначе ставим. Тогл по сути
     if existing:
         db.session.delete(existing)
+        liked = False
     else:
         db.session.add(Like(user_id=current_user.id, post_id=post.id))
+        liked = True
     db.session.commit()
+
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"liked": liked, "count": post.likes_count()})
+
     return redirect(request.referrer or url_for("show_post", post_id=post.id))
+
+
+@app.route("/post/<int:post_id>/comments")
+def post_comments(post_id):
+    #для подгрузки комментов прямо в ленте, без захода в пост
+    post = Post.query.get_or_404(post_id)
+    comments = post.comments.all()
+    return jsonify({
+        "comments": [{
+            "id": c.id,
+            "text": c.text,
+            "author": c.author.nickname,
+            "author_id": c.author_id,
+            "time": c.created_at.strftime("%d.%m.%Y %H:%M"),
+            "is_mine": current_user.is_authenticated and current_user.id == c.author_id,
+        } for c in comments],
+    })
 
 
 @app.route("/post/<int:post_id>/comment", methods=["POST"])
@@ -260,17 +400,63 @@ def like_post(post_id):
 def add_comment(post_id):
     post = Post.query.get_or_404(post_id)
     text = (request.form.get("text") or "").strip()
+    parent_id = request.form.get("parent_id", type=int)
+    is_ajax = request.headers.get("X-Requested-With") == "XMLHttpRequest"
 
     if not text:
+        if is_ajax:
+            return jsonify({"error": "пусто"}), 400
         flash("Комментарий пустой", "danger")
         return redirect(url_for("show_post", post_id=post.id))
 
     if len(text) > 1000:
+        if is_ajax:
+            return jsonify({"error": "слишком длинный"}), 400
         flash("Слишком длинный комментарий", "danger")
         return redirect(url_for("show_post", post_id=post.id))
 
-    db.session.add(Comment(text=text, author_id=current_user.id, post_id=post.id))
+    #проверка на parent - должен быть валидный коммент того же поста
+    parent = None
+    if parent_id:
+        parent = Comment.query.filter_by(id=parent_id, post_id=post.id).first()
+        if not parent:
+            if is_ajax:
+                return jsonify({"error": "родитель не найден"}), 400
+            flash("Не нашёл коммент на который отвечаешь", "danger")
+            return redirect(url_for("show_post", post_id=post.id))
+
+        # ограничиваем глубину: считаем сколько уровней от parent до корня.
+        # depth=0 для корня, добавляем дочерний - будет depth=1, и т.д. Максимум 2
+        # (значит можно поставить ответ на ответ, но не глубже)
+        depth = 0
+        cur = parent
+        while cur.parent_id:
+            depth += 1
+            cur = cur.parent
+        if depth >= 2:
+            #схлопываем - крепим к тому же родителю что и parent (поднимаемся на уровень)
+            parent_id = parent.parent_id or parent.id
+
+    c = Comment(
+        text=text,
+        author_id=current_user.id,
+        post_id=post.id,
+        parent_id=parent_id,
+    )
+    db.session.add(c)
     db.session.commit()
+
+    if is_ajax:
+        return jsonify({
+            "id": c.id,
+            "text": c.text,
+            "author": c.author.nickname,
+            "author_id": c.author_id,
+            "time": c.created_at.strftime("%d.%m.%Y %H:%M"),
+            "parent_id": c.parent_id,
+            "comments_count": post.comments_count(),
+        })
+
     return redirect(url_for("show_post", post_id=post.id))
 
 
@@ -291,19 +477,34 @@ def delete_comment(comment_id):
 def react_to_comment(comment_id):
     c = Comment.query.get_or_404(comment_id)
     emoji = request.form.get("emoji", "")
-    # пускаем только то что в нашем списке, а то юзеры понапихают всякого
+    #пускаем только то что в нашем списке, а то юзеры понапихают 
     if emoji not in ALLOWED_REACTIONS:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"error": "bad emoji"}), 400
         abort(400)
 
     existing = Reaction.query.filter_by(
         user_id=current_user.id, comment_id=c.id, emoji=emoji
     ).first()
     if existing:
+        #повторный клик по той же реакции - снимаем
         db.session.delete(existing)
     else:
+        user_reactions = Reaction.query.filter_by(
+            user_id=current_user.id, comment_id=c.id
+        ).order_by(Reaction.created_at.asc()).all()
+        while len(user_reactions) >= MAX_REACTIONS_PER_USER:
+            db.session.delete(user_reactions.pop(0))
         db.session.add(Reaction(user_id=current_user.id, comment_id=c.id, emoji=emoji))
     db.session.commit()
-    # якорь чтоб юзера сразу подкинуло к комменту, а не наверх страницы
+
+    # AJAX страница перерисует сама
+    if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({
+            "ok": True,
+            "reactions": c.reactions_summary(current_user),
+        })
+
     return redirect(url_for("show_post", post_id=c.post_id) + f"#comment-{c.id}")
 
 
@@ -331,7 +532,7 @@ def unfollow_user(user_id):
 @app.route("/profile")
 @app.route("/profile/<int:user_id>")
 def profile(user_id=None):
-    # без id — показываем свой профиль (если залогинен)
+    #без id - показываем свой профиль
     if user_id is None:
         if not current_user.is_authenticated:
             return redirect(url_for("login"))
@@ -370,7 +571,7 @@ def edit_profile():
             if not allowed_file(file.filename):
                 flash("Неподдерживаемый формат аватарки", "danger")
                 return redirect(url_for("edit_profile"))
-            # старую сносим, иначе намусорится
+            #старую сносим, иначе намусорится
             delete_image(current_user.avatar, AVATAR_DIR)
             current_user.avatar = save_image(file, AVATAR_DIR, max_side=400)
 
@@ -394,7 +595,7 @@ def login():
         login_value = request.form.get("login")
         password = request.form.get("password")
 
-        # пускаем войти и по нику и по почте — оба уникальны
+        #пускаем войти и по нику и по почте - оба уникальны
         user = User.query.filter(
             (User.nickname == login_value) | (User.mail == login_value)
         ).first()
@@ -457,19 +658,100 @@ def toggle_theme():
     current = request.cookies.get("theme", "light")
     new_theme = "dark" if current == "light" else "light"
     resp = make_response(redirect(request.referrer or url_for("main_page")))
-    # год хранится — нормально, не пароль же
     resp.set_cookie("theme", new_theme, max_age=60 * 60 * 24 * 365)
     return resp
 
 
-# ловит когда юзер пытается залить слишком жирный файл — Flask кидает 413
 @app.errorhandler(413)
 def too_large(e):
     flash("Файл слишком большой (макс 5 МБ)", "danger")
     return redirect(request.referrer or url_for("main_page"))
 
 
+# === админка ===
+
+ADMIN_EMAIL = "admin@as.local"
+ADMIN_NICKNAME = "admin"
+ADMIN_DEFAULT_PASSWORD = os.environ.get("ADMIN_PASSWORD", "Admin12345")
+
+
+def ensure_admin_and_defaults():
+    """при первом запуске создаём админа и пару базовых категорий"""
+    if not User.query.filter_by(mail=ADMIN_EMAIL).first():
+        admin = User(nickname=ADMIN_NICKNAME, mail=ADMIN_EMAIL, is_admin=True)
+        admin.set_password(ADMIN_DEFAULT_PASSWORD)
+        db.session.add(admin)
+
+    #хотя бы одна категория должна быть, иначе нельзя создавать посты
+    if not Category.query.first():
+        defaults = [
+            ("Разное", 100),
+            ("Математика", 10),
+            ("История", 20),
+            ("Программирование", 30),
+        ]
+        for name, order in defaults:
+            db.session.add(Category(name=name, sort_order=order))
+
+    db.session.commit()
+
+
+@app.route("/admin")
+@admin_required
+def admin_index():
+    return redirect(url_for("admin_categories"))
+
+
+@app.route("/admin/categories", methods=["GET", "POST"])
+@admin_required
+def admin_categories():
+    if request.method == "POST":
+        action = request.form.get("action")
+
+        if action == "add":
+            name = (request.form.get("name") or "").strip()
+            if not name:
+                flash("Имя категории не может быть пустым", "danger")
+            elif Category.query.filter_by(name=name).first():
+                flash("Категория с таким именем уже есть", "warning")
+            elif len(name) > 50:
+                flash("Слишком длинное имя (макс 50)", "danger")
+            else:
+                max_order = db.session.query(db.func.max(Category.sort_order)).scalar() or 0
+                db.session.add(Category(name=name, sort_order=max_order + 10))
+                db.session.commit()
+                flash("Категория добавлена", "success")
+
+        elif action == "rename":
+            cat = Category.query.get_or_404(request.form.get("id", type=int))
+            new_name = (request.form.get("name") or "").strip()
+            if not new_name:
+                flash("Имя не может быть пустым", "danger")
+            else:
+                cat.name = new_name
+                db.session.commit()
+                flash("Переименовано", "success")
+
+        elif action == "delete":
+            cat = Category.query.get_or_404(request.form.get("id", type=int))
+            fallback = Category.query.filter_by(name="Разное").first()
+            if fallback and cat.id == fallback.id:
+                flash("Категорию 'Разное' удалять нельзя — это запасной вариант", "warning")
+            else:
+                #все посты этой категории переезжают в "Разное"
+                if fallback:
+                    Post.query.filter_by(category_id=cat.id).update({"category_id": fallback.id})
+                db.session.delete(cat)
+                db.session.commit()
+                flash("Категория удалена, посты перенесены в 'Разное'", "info")
+
+        return redirect(url_for("admin_categories"))
+
+    return render_template("admin_categories.html")
+
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        ensure_admin_and_defaults()
     app.run(port=8080, host="127.0.0.1", debug=True)

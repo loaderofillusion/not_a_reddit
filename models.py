@@ -3,7 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# db создаётся тут без app, привязываем уже в main через init_app
+#db создаётся тут без app, привязываем уже в main через init_app
 db = SQLAlchemy()
 
 
@@ -15,10 +15,11 @@ class User(db.Model, UserMixin):
     mail = db.Column(db.String, unique=True, nullable=False)
     password_hash = db.Column(db.String, nullable=False)
     bio = db.Column(db.String(300), default="")
-    avatar = db.Column(db.String, nullable=True)  # имя файла в static/uploads/avatars
+    avatar = db.Column(db.String, nullable=True)  #имя файла в static/uploads/avatars
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_admin = db.Column(db.Boolean, default=False, nullable=False)
 
-    # подписки на других — это записи где этот юзер follower
+    #подписки на других - это записи где этот юзер follower
     following = db.relationship(
         "Follow",
         foreign_keys="Follow.follower_id",
@@ -26,7 +27,7 @@ class User(db.Model, UserMixin):
         cascade="all, delete-orphan",
         lazy="dynamic",
     )
-    # подписчики этого юзера — записи где он followed
+    #подписчики этого юзера - записи где он followed
     followers = db.relationship(
         "Follow",
         foreign_keys="Follow.followed_id",
@@ -47,10 +48,9 @@ class User(db.Model, UserMixin):
         return self.following.filter_by(followed_id=other.id).first() is not None
 
     def follow(self, other):
-        # на себя подписываться нельзя
+        #на себя подписываться нельзя
         if other.id == self.id:
             return
-        # и второй раз тоже — UniqueConstraint конечно не пустит, но лучше проверим заранее
         if not self.is_following(other):
             db.session.add(Follow(follower_id=self.id, followed_id=other.id))
 
@@ -72,10 +72,33 @@ class Follow(db.Model):
     follower_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     followed_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    # одна и та же подписка только один раз
+    #одна и та же подписка только один раз
     __table_args__ = (
         db.UniqueConstraint("follower_id", "followed_id", name="uniq_follow"),
     )
+
+
+class Category(db.Model):
+    __tablename__ = "categories"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    #порядок сортировки чтобы мы могли управлять выводом
+    sort_order = db.Column(db.Integer, default=0)
+
+
+#связующая таблица для many-to-many между постами и тегами
+post_tags = db.Table(
+    "post_tags",
+    db.Column("post_id", db.Integer, db.ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True),
+    db.Column("tag_id", db.Integer, db.ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Tag(db.Model):
+    __tablename__ = "tags"
+    id = db.Column(db.Integer, primary_key=True)
+    #имя в нижнем регистре, без #, без пробелов
+    name = db.Column(db.String(40), unique=True, nullable=False, index=True)
 
 
 class Post(db.Model):
@@ -84,17 +107,18 @@ class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String, nullable=False)
     text = db.Column(db.Text, nullable=False)
-    image = db.Column(db.String, nullable=True)  # имя файла в static/uploads/posts
+    image = db.Column(db.String, nullable=True)  #имя файла в static/uploads/posts
 
     author_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     author = db.relationship("User", backref="posts")
 
     post_date = db.Column(db.DateTime, default=datetime.utcnow)
-    edited_at = db.Column(db.DateTime, nullable=True)  # None = ни разу не редактировался
-    category = db.Column(db.String, nullable=True)
+    edited_at = db.Column(db.DateTime, nullable=True)  #None = ни разу не редактировался
+    category_id = db.Column(db.Integer, db.ForeignKey("categories.id"), nullable=False)
+    category = db.relationship("Category", backref="posts")
     views = db.Column(db.Integer, default=0)
 
-    # cascade чтобы при удалении поста ушли и его лайки/комменты
+    #cascade чтобы при удалении поста ушли и его лайки/комменты
     likes = db.relationship(
         "Like", backref="post", cascade="all, delete-orphan", lazy="dynamic"
     )
@@ -102,15 +126,22 @@ class Post(db.Model):
         "Comment", backref="post", cascade="all, delete-orphan",
         lazy="dynamic", order_by="Comment.created_at.desc()"
     )
+    tags = db.relationship("Tag", secondary=post_tags, backref="posts")
 
     def likes_count(self):
         return self.likes.count()
 
     def comments_count(self):
+        #считаем все комменты включая ответы
         return self.comments.count()
 
+    def root_comments(self):
+        #для отображения — берём только верхний уровень, отсортированный по убыванию.
+        #Ответы достанутся через relationship .replies
+        return self.comments.filter_by(parent_id=None).order_by(Comment.created_at.desc()).all()
+
     def liked_by(self, user):
-        # для анонимов сразу False, чтоб не делать лишний запрос
+        # ля анонимов сразу False, чтоб не делать лишний запрос
         if not user or not user.is_authenticated:
             return False
         return self.likes.filter_by(user_id=user.id).first() is not None
@@ -128,7 +159,9 @@ class Post(db.Model):
             "edited": self.edited_at is not None,
             "likes": self.likes_count(),
             "comments": self.comments_count(),
-            "category": self.category,
+            "category": self.category.name if self.category else None,
+            "category_id": self.category_id,
+            "tags": [t.name for t in self.tags],
             "views": self.views,
             "liked": self.liked_by(current_user),
         }
@@ -142,7 +175,7 @@ class Like(db.Model):
     post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # один юзер не может лайкнуть один пост дважды
+    # дин юзер не может лайкнуть один пост дважды
     __table_args__ = (db.UniqueConstraint("user_id", "post_id", name="uniq_like"),)
 
 
@@ -158,13 +191,23 @@ class Comment(db.Model):
 
     post_id = db.Column(db.Integer, db.ForeignKey("posts.id"), nullable=False)
 
+    #если это ответ на другой коммент - здесь id родителя
+    parent_id = db.Column(db.Integer, db.ForeignKey("comments.id"), nullable=True)
+    #children - все ответы на этот коммент
+    replies = db.relationship(
+        "Comment",
+        backref=db.backref("parent", remote_side="Comment.id"),
+        cascade="all, delete-orphan",
+        order_by="Comment.created_at.asc()",  #внутри ветки - старые сверху
+    )
+
     reactions = db.relationship(
         "Reaction", backref="comment", cascade="all, delete-orphan", lazy="dynamic"
     )
 
     def reactions_summary(self, current_user=None):
-        # собираем сводку: какие эмодзи стоят, сколько раз и моё ли
-        # формат: [{"emoji": "👍", "count": 3, "mine": True}, ...]
+        #собираем сводку: какие эмодзи стоят, сколько раз и моё ли
+        #формат: [{"emoji": "👍", "count": 3, "mine": True}, ...]
         result = []
         for emoji in ALLOWED_REACTIONS:
             qs = self.reactions.filter_by(emoji=emoji)
@@ -178,9 +221,20 @@ class Comment(db.Model):
         return result
 
 
-# Жёсткий список разрешённых эмодзи. Если хочется добавить — просто допиши сюда.
-# Без этого юзеры могли бы пихать любую эмодзяшку, и в БД был бы зоопарк.
-ALLOWED_REACTIONS = ["👍", "❤️", "🤔", "🔥", "😂"]
+# список разрешённых эмодзи. первые 5 — самые ходовые, показываются в пикере сразу,
+# остальные открываются по стрелочке вниз
+ALLOWED_REACTIONS = [
+    # популярные
+    "👍", "❤️", "😂", "🔥", "🤔",
+    # эмоции
+    "😍", "🥰", "😎", "🤩", "😭", "😢", "😡", "🤯", "😱", "🥱",
+    # одобрение / не очень
+    "👎", "👏", "🙏", "💯", "✅", "❌",
+    # реакции на контент
+    "🎉", "🤝", "💪", "🧠", "👀", "🤡", "💀",
+    # сердца
+    "💔", "💖",
+]
 
 
 class Reaction(db.Model):
